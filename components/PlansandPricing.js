@@ -140,9 +140,9 @@ export default function PlansAndPricing() {
   };
 
   return (
-    <section className="bg-gradient-to-b from-gray-500 via-gray-450 to-gray-400 text-white py-20">
+    <section className="bg-gradient-to-b from-gray-600 via-gray-450 to-gray-400 text-white py-20">
       <div className="container mx-auto px-4">
-        <h2 className="text-4xl font-bold text-center text-white-900 mb-4">AI Greeting Card Generator</h2>
+        <h2 className="text-4xl font-bold text-center text-white-900 mb-8">PlansAndPricing</h2>
         <p className="text-center text-white-500 mb-8">Choose a plan that fits your needs and start creating amazing cards today.</p>
         
         <div className="grid md:grid-cols-3 gap-8">
