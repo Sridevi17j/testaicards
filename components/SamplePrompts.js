@@ -136,7 +136,7 @@ const prompts = [
     }, [cardRef]);
   
     return (
-      <section className="bg-gray-600 text-white py-20 relative overflow-hidden">
+      <section className="bg-gray-600 text-white py-16 pt-8 relative overflow-hidden">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-8">Sample Prompts</h2>
           <div className="relative h-12 overflow-hidden">

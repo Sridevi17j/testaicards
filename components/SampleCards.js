@@ -35,7 +35,7 @@ export default function SampleCards() {
   }
 
   return (
-    <section className="bg-gradient-to-b from-gray-700 via-gray-600 to-gray-600 text-white py-20">
+    <section className="bg-gradient-to-b from-gray-700 via-gray-600 to-gray-600 text-white py-16 pt-8">
       <style jsx global>{`
         @keyframes hoverAnimation {
           0% {

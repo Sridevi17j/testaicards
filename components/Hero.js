@@ -14,7 +14,7 @@ export default function Hero() {
   }
 
   return (
-    <section className="bg-gradient-to-b from-gray-950 via-gray-800 to-gray-700 text-white py-20">
+    <section className="bg-gradient-to-b from-gray-950 via-gray-800 to-gray-700 text-white py-16 pb-8 pt-24">
       <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
         <h1 className="text-4xl font-bold mb-4">
           Where <span className="text-blue-400">AI</span> brings greetings to life

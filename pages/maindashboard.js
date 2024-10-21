@@ -2,6 +2,93 @@ import React, { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
+const pricingPlans = [
+    { name: 'Basic', price: 100, cards: 10, color: 'from-blue-500 to-blue-600' },
+    { name: 'Premium', price: 500, cards: 50, color: 'from-purple-500 to-purple-600' }
+];
+
+const CheckoutForm = ({ plan, onSuccess, onCancel }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [error, setError] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState('');
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setProcessing(true);
+    setError(null);
+
+    if (!stripe || !elements) {
+      setError("Stripe hasn't loaded yet. Please try again.");
+      setProcessing(false);
+      return;
+    }
+
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setError(submitError.message);
+      setProcessing(false);
+      return;
+    }
+
+    const { error: paymentError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required',
+    });
+
+    if (paymentError) {
+      setError(paymentError.message);
+    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+      setPaymentStatus('success');
+      onSuccess(paymentIntent, plan);
+    } else {
+      setError('Something went wrong with the payment.');
+    }
+
+    setProcessing(false);
+  };
+
+  return (
+    <div className="relative">
+      <form onSubmit={handleSubmit}>
+        {paymentStatus !== 'success' && <PaymentElement />}
+        {error && <div className="text-red-500 mt-2">{error}</div>}
+        {paymentStatus === 'success' ? (
+          <div className="text-center mt-6">
+            <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <p className="mt-4 text-xl font-semibold text-gray-800">Payment Successful</p>
+            <p className="mt-2 text-sm text-gray-600">{plan.cards} cards will be added to your account.</p>
+          </div>
+        ) : (
+          <div className="flex justify-between mt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!stripe || processing}
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              {processing ? 'Processing...' : `Pay $${plan.price / 100}`}
+            </button>
+          </div>
+        )}
+      </form>
+    </div>
+  );
+};
 
 const Dashboard = () => {
   const { data: session, status } = useSession();
@@ -10,6 +97,11 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [prompt, setPrompt] = useState('');
   const router = useRouter();
+
+  // New state variables for payment
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [clientSecret, setClientSecret] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -115,6 +207,46 @@ const Dashboard = () => {
     }
   };
 
+  // New functions for payment handling
+  const handleUpgrade = async (planName) => {
+    const plan = pricingPlans.find(p => p.name === planName);
+    if (plan) {
+      setSelectedPlan(plan);
+      await initializePayment(plan);
+    }
+  };
+
+  const initializePayment = async (plan) => {
+    try {
+      const response = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: plan.price, planName: plan.name }),
+      });
+      const data = await response.json();
+      setClientSecret(data.clientSecret);
+      setShowPaymentForm(true);
+    } catch (error) {
+      console.error('Error creating PaymentIntent:', error);
+    }
+  };
+
+  const handlePaymentSuccess = async (paymentIntent, plan) => {
+    try {
+      const updatedCardsRemaining = user.cards_remaining + plan.cards;
+      const updatedUser = await updateUserData(user.email, user.name, plan.name, updatedCardsRemaining);
+      setUser(updatedUser);
+      console.log(`Added ${plan.cards} cards. New total: ${updatedCardsRemaining}`);
+      setTimeout(() => {
+        setShowPaymentForm(false);
+      }, 3000); // Hide payment form after 3 seconds
+    } catch (error) {
+      console.error('Error updating user plan:', error);
+    }
+  };
+
+  
+
   if (status === 'loading' || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -151,14 +283,17 @@ const Dashboard = () => {
       </div>
     );
   }
-
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">CardifAI</h1>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white relative overflow-hidden">
+      <div className="starry-background"></div>
+      <header className="bg-gray-900 bg-opacity-80 shadow relative z-10">
+        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <h1 className="text-3xl font-bold">
+            <span className="text-blue-400">AI</span>
+            <span className="text-red-500">Cards</span>
+          </h1>
           <div className="flex items-center">
-            <span className="mr-4">Welcome, {user.name}</span>
+            <span className="mr-4 text-gray-300">Welcome, {user?.name}</span>
             <button
               onClick={() => signOut({ callbackUrl: '/' })}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -168,25 +303,54 @@ const Dashboard = () => {
           </div>
         </div>
       </header>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+  
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 relative z-10">
         <div className="px-4 py-6 sm:px-0">
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-2xl font-semibold mb-4">Your Current Plan: {user.plan_name}</h2>
-            <p className="text-lg mb-4">Cards Remaining: {user.cards_remaining}</p>
-            {user.plan_name === 'Free Plan' && user.cards_remaining === 4 && (
-              <p className="text-green-600 font-semibold mb-4">Welcome! Here are your 4 free cards to get started!</p>
-            )}
+          <div className="bg-gray-800 bg-opacity-80 shadow rounded-lg p-6">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-semibold mb-2">Your Current Plan: {user?.plan_name}</h2>
+                <p className="text-lg">Cards Remaining: {user?.cards_remaining}</p>
+                {user?.plan_name === 'Free Plan' && user?.cards_remaining === 4 && (
+                  <p className="text-green-400 font-semibold mt-2">Welcome! Here are your 4 free cards to get started!</p>
+                )}
+              </div>
+              
+              <div className="flex space-x-4">
+                <div className="group relative">
+                  <button
+                    onClick={() => handleUpgrade('Basic')}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                  >
+                    Upgrade to Basic
+                  </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-white bg-opacity-10 backdrop-filter backdrop-blur-sm border border-white border-opacity-20 rounded-lg text-white text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+                    $1 for 10 cards
+                  </div>
+                </div>
+                <div className="group relative">
+                  <button
+                    onClick={() => handleUpgrade('Premium')}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-full hover:from-purple-600 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                  >
+                    Upgrade to Premium
+                  </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-white bg-opacity-10 backdrop-filter backdrop-blur-sm border border-white border-opacity-20 rounded-lg text-white text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+                    $5 for 50 cards
+                  </div>
+                </div>
+              </div>
+            </div>
             <div className="mt-6">
               <h3 className="text-xl font-semibold mb-2">Generate a New Card</h3>
-              {user.cards_remaining > 0 ? (
+              {user?.cards_remaining > 0 ? (
                 <div className="flex">
                   <input
                     type="text"
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Enter your card prompt"
-                    className="flex-grow px-4 py-2 border border-gray-300 rounded-l-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-grow px-4 py-2 bg-gray-700 border border-gray-600 rounded-l-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                   />
                   <button
                     onClick={handleGenerateCard}
@@ -196,10 +360,10 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
+                <div className="bg-yellow-900 border-l-4 border-yellow-500 text-yellow-200 p-4 mb-4" role="alert">
                   <p className="font-bold">Warning</p>
                   <p>You have no remaining cards. Please purchase more credits to continue generating cards.</p>
-                  <Link href="/plans-and-pricing" className="text-blue-600 hover:text-blue-800 underline">
+                  <Link href="/plans-and-pricing" className="text-blue-400 hover:text-blue-300 underline">
                     View Plans and Pricing
                   </Link>
                 </div>
@@ -208,6 +372,20 @@ const Dashboard = () => {
           </div>
         </div>
       </main>
+      {showPaymentForm && clientSecret && (
+  <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+    <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+      <h3 className="text-xl font-bold mb-4 text-gray-800">Complete Your Payment</h3>
+      <Elements stripe={stripePromise} options={{ clientSecret }}>
+        <CheckoutForm 
+          plan={selectedPlan} 
+          onSuccess={handlePaymentSuccess}
+          onCancel={() => setShowPaymentForm(false)}
+        />
+      </Elements>
+    </div>
+  </div>
+)}
     </div>
   );
 };

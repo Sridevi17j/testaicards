@@ -1,13 +1,10 @@
 import { useRef } from 'react'
-import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import Header from '../components/Header'
 import CardGrid from '../components/SampleCards'
 import SamplePrompts from '../components/SamplePrompts'
 import PlansAndPricing from '../components/PlansandPricing'
 import Hero from '../components/Hero'
-
-//const DynamicHero = dynamic(() => import('../components/Hero'), { ssr: false })
 
 export default function Home() {
   const cardGridRef = useRef(null)
@@ -19,7 +16,7 @@ export default function Home() {
   }
 
   return (
-    <div>
+    <div className="flex flex-col min-h-screen">
       <Head>
         <title>AICardify - AI-generated greeting cards</title>
         <meta name="description" content="AICards generates greeting cards for all your occasions" />
@@ -30,18 +27,18 @@ export default function Home() {
         scrollToPrompts={() => scrollToSection(promptsRef)}
         scrollToPlansandPricing={() => scrollToSection(plansandpricingRef)}
       />
-      <main className="bg-gradient-to-br from-gray-900 to-blue-900">
-  <Hero />
-  <div ref={cardGridRef} className="bg-white">
-    <CardGrid />
-  </div>
-  <div ref={promptsRef} className="bg-gray-100">
-    <SamplePrompts />
-  </div>
-  <div ref={plansandpricingRef} className="bg-white">
-    <PlansAndPricing />
-  </div>
-</main>
+      <main className="flex-grow pt-16 bg-gradient-to-br from-gray-900 to-blue-900">
+        <Hero />
+        <div ref={cardGridRef} className="bg-white">
+          <CardGrid />
+        </div>
+        <div ref={promptsRef} className="bg-gray-100">
+          <SamplePrompts />
+        </div>
+        <div ref={plansandpricingRef} className="bg-white">
+          <PlansAndPricing />
+        </div>
+      </main>
     </div>
   )
 }
